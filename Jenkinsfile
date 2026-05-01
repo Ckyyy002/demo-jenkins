@@ -1,124 +1,84 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'golang:1.23-bookworm'
+            args '''-u root \
+                    -e HOME=/tmp \
+                    -e GOCACHE=/tmp/go-cache \
+                    -e GOPATH=/tmp/go \
+                    -v /var/jenkins_home/tools:/var/jenkins_home/tools'''
+        }
+    }
 
     environment {
-        // Ambil credential dari Jenkins Credential Manager
-        SONAR_TOKEN      = credentials('sonarqube-token')
-        DISCORD_WEBHOOK  = credentials('discord-webhook-url')
-        
-        // Nama proyek di SonarQube
-        SONAR_PROJECT_KEY = 'demo-jenkins'
+        SONARQUBE_ENV = 'sonarserver'
+        PROJECT_KEY   = 'go-project'
+        PROJECT_NAME  = 'go-project'
+        SCANNER_HOME  = tool 'sonarqube8.0'
     }
 
     stages {
-
-        // ─────────────────────────────────────────────
         stage('Checkout') {
             steps {
-                echo '📥 Mengambil kode dari GitHub...'
-                checkout scm
+                git branch: 'main',
+                    url: 'https://github.com/hamasfaa/demo-jenkins',
+                    credentialsId: 'jenkinsUser'
             }
         }
 
-        // ─────────────────────────────────────────────
+        stage('Setup') {
+            steps {
+                sh '''
+                    git config --global --add safe.directory ${WORKSPACE}
+                    apt-get update -qq
+                    apt-get install -y -qq default-jre-headless
+                    go version
+                    go mod download
+                '''
+            }
+        }
+
         stage('Build') {
             steps {
-                echo '🔨 Menjalankan Build...'
-                // Sesuaikan dengan tech stack kamu
-                // Contoh Node.js:
-                sh 'npm install'
-                // Contoh Maven:
-                // sh 'mvn clean package -DskipTests'
+                sh 'go build -v ./...'
             }
         }
 
-        // ─────────────────────────────────────────────
         stage('Test') {
             steps {
-                echo '🧪 Menjalankan Unit Test...'
-                // Contoh Node.js:
-                sh 'npm test -- --coverage || true'
-                // Contoh Maven:
-                // sh 'mvn test'
-            }
-            post {
-                always {
-                    // Publish test result jika ada
-                    // junit 'target/surefire-reports/*.xml'
-                    echo '📊 Test selesai.'
-                }
+                sh 'go test ./... -v -coverprofile=coverage.out'
             }
         }
 
-        // ─────────────────────────────────────────────
         stage('SonarQube Analysis') {
             steps {
-                echo '🔍 Menjalankan SonarQube Analysis...'
-                withSonarQubeEnv('SonarQube') {
+                withSonarQubeEnv("${SONARQUBE_ENV}") {
                     sh """
-                        sonar-scanner \
-                          -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                          -Dsonar.projectName='Demo Jenkins' \
+                        ${SCANNER_HOME}/bin/sonar-scanner \
+                          -Dsonar.projectKey=${PROJECT_KEY} \
+                          -Dsonar.projectName=${PROJECT_NAME} \
                           -Dsonar.sources=. \
-                          -Dsonar.exclusions=node_modules/**,coverage/**,.git/** \
-                          -Dsonar.host.url=http://57.158.98.73:9000 \
-                          -Dsonar.token=${SONAR_TOKEN}
+                          -Dsonar.go.coverage.reportPaths=coverage.out
                     """
                 }
             }
         }
 
-        // ─────────────────────────────────────────────
         stage('Quality Gate') {
             steps {
-                echo '🚦 Menunggu Quality Gate SonarQube...'
-                timeout(time: 5, unit: 'MINUTES') {
+                timeout(time: 20, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
             }
         }
-
-        // ─────────────────────────────────────────────
-        stage('Deploy') {
-            when {
-                branch 'main'
-            }
-            steps {
-                echo '🚀 Deploying ke server...'
-                // Tambahkan langkah deploy kamu di sini
-                // Contoh: docker build & run, rsync, dll.
-                echo '✅ Deploy berhasil!'
-            }
-        }
     }
 
-    // ─────────────────────────────────────────────────
     post {
         success {
-            echo '✅ Pipeline BERHASIL!'
-            script {
-                def msg = """{"embeds": [{"title": "✅ Build Berhasil","description": "**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**Branch:** ${env.GIT_BRANCH ?: 'N/A'}\\n**URL:** ${env.BUILD_URL}","color": 3066993}]}"""
-                sh """
-                    curl -s -X POST "${DISCORD_WEBHOOK}" \
-                         -H "Content-Type: application/json" \
-                         -d '${msg}'
-                """
-            }
+            echo 'Pipeline sukses'
         }
         failure {
-            echo '❌ Pipeline GAGAL!'
-            script {
-                def msg = """{"embeds": [{"title": "❌ Build Gagal","description": "**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**Branch:** ${env.GIT_BRANCH ?: 'N/A'}\\n**URL:** ${env.BUILD_URL}","color": 15158332}]}"""
-                sh """
-                    curl -s -X POST "${DISCORD_WEBHOOK}" \
-                         -H "Content-Type: application/json" \
-                         -d '${msg}'
-                """
-            }
-        }
-        always {
-            echo '🏁 Pipeline selesai dieksekusi.'
-            cleanWs()
+            echo 'Pipeline gagal'
         }
     }
 }
