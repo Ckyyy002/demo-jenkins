@@ -2,7 +2,7 @@ pipeline {
     agent any
 
     environment {
-        SONAR_TOKEN       = credentials('sonarqube-token')
+        SONAR_TOKEN       = credentials('sonarqube token')
         DISCORD_WEBHOOK   = credentials('discord-webhook-url')
         SONAR_PROJECT_KEY = 'demo-jenkins'
         PATH              = "/usr/local/go/bin:${env.PATH}"
