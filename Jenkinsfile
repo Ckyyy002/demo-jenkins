@@ -31,18 +31,15 @@ pipeline {
         stage('SonarQube Analysis') {
             steps {
                 withSonarQubeEnv('sonarqube') {
-                    script {
-                        def scannerHome = tool 'sonarqube8.1'
-                        sh """
-                            ${scannerHome}/bin/sonar-scanner \
-                              -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
-                              -Dsonar.projectName='Demo Jenkins' \
-                              -Dsonar.sources=. \
-                              -Dsonar.exclusions=**/*_test.go \
-                              -Dsonar.host.url=http://20.205.129.74:9000 \
-                              -Dsonar.token=${SONAR_TOKEN}
-                        """
-                    }
+                    sh """
+                        sonar-scanner \
+                          -Dsonar.projectKey=${SONAR_PROJECT_KEY} \
+                          -Dsonar.projectName='Demo Jenkins' \
+                          -Dsonar.sources=. \
+                          -Dsonar.exclusions=**/*_test.go \
+                          -Dsonar.host.url=http://20.205.129.74:9000 \
+                          -Dsonar.token=${SONAR_TOKEN}
+                    """
                 }
             }
         }
