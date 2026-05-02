@@ -2,24 +2,21 @@ pipeline {
     agent any
 
     environment {
-        SONAR_TOKEN     = credentials('sonarqube-token')
-        DISCORD_WEBHOOK = credentials('discord-webhook-url')
+        SONAR_TOKEN       = credentials('sonarqube-token')
+        DISCORD_WEBHOOK   = credentials('discord-webhook-url')
         SONAR_PROJECT_KEY = 'demo-jenkins'
-        PATH = "/usr/local/go/bin:${env.PATH}"
+        PATH              = "/usr/local/go/bin:${env.PATH}"
     }
 
     stages {
-
         stage('Checkout') {
             steps {
-                echo '📥 Mengambil kode dari GitHub...'
                 checkout scm
             }
         }
 
         stage('Build') {
             steps {
-                echo '🔨 Menjalankan Build...'
                 sh 'go version'
                 sh 'go build ./...'
             }
@@ -27,14 +24,12 @@ pipeline {
 
         stage('Test') {
             steps {
-                echo '🧪 Menjalankan Unit Test...'
                 sh 'go test ./... -v'
             }
         }
 
         stage('SonarQube Analysis') {
             steps {
-                echo '🔍 Menjalankan SonarQube Analysis...'
                 withSonarQubeEnv('SonarQube') {
                     sh """
                         sonar-scanner \
@@ -42,7 +37,7 @@ pipeline {
                           -Dsonar.projectName='Demo Jenkins' \
                           -Dsonar.sources=. \
                           -Dsonar.exclusions=**/*_test.go \
-                          -Dsonar.host.url=http://57.158.98.73:9000 \
+                          -Dsonar.host.url=http://20.205.129.74:9000 \
                           -Dsonar.token=${SONAR_TOKEN}
                     """
                 }
@@ -51,7 +46,6 @@ pipeline {
 
         stage('Quality Gate') {
             steps {
-                echo '🚦 Menunggu Quality Gate SonarQube...'
                 timeout(time: 5, unit: 'MINUTES') {
                     waitForQualityGate abortPipeline: true
                 }
@@ -59,34 +53,30 @@ pipeline {
         }
 
         stage('Deploy') {
-            when {
-                branch 'main'
-            }
+            when { branch 'main' }
             steps {
-                echo '🚀 Deploying...'
                 sh 'go build -o app ./...'
-                echo '✅ Deploy berhasil!'
+                echo 'Deploy berhasil.'
             }
         }
     }
 
     post {
         success {
-            echo '✅ Pipeline BERHASIL!'
             script {
-                def msg = """{"embeds": [{"title": "✅ Build Berhasil","description": "**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**Branch:** ${env.GIT_BRANCH ?: 'N/A'}\\n**URL:** ${env.BUILD_URL}","color": 3066993}]}"""
-                sh "curl -s -X POST '${DISCORD_WEBHOOK}' -H 'Content-Type: application/json' -d '${msg}'"
+                sh """curl -s -X POST '${DISCORD_WEBHOOK}' \
+                  -H 'Content-Type: application/json' \
+                  -d '{"embeds":[{"title":"Build Berhasil","description":"**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**URL:** ${env.BUILD_URL}","color":3066993}]}'"""
             }
         }
         failure {
-            echo '❌ Pipeline GAGAL!'
             script {
-                def msg = """{"embeds": [{"title": "❌ Build Gagal","description": "**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**Branch:** ${env.GIT_BRANCH ?: 'N/A'}\\n**URL:** ${env.BUILD_URL}","color": 15158332}]}"""
-                sh "curl -s -X POST '${DISCORD_WEBHOOK}' -H 'Content-Type: application/json' -d '${msg}'"
+                sh """curl -s -X POST '${DISCORD_WEBHOOK}' \
+                  -H 'Content-Type: application/json' \
+                  -d '{"embeds":[{"title":"Build Gagal","description":"**Job:** ${env.JOB_NAME}\\n**Build:** #${env.BUILD_NUMBER}\\n**URL:** ${env.BUILD_URL}","color":15158332}]}'"""
             }
         }
         always {
-            echo '🏁 Pipeline selesai dieksekusi.'
             cleanWs()
         }
     }
